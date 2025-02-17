@@ -54,7 +54,7 @@
 
 -   Next week, you'll learn to work with Neon when it's time to connect your server to a database, but for now it serves as a nice tool to visually represent our SQL queries
 
-### CREATE TABLE
+## CREATE TABLE
 
 -   Let's break this query down line by line
 
@@ -63,7 +63,7 @@ CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     first_name VARCHAR(255),
     last_name VARCHAR(255),
-    age INT,
+    age INT
 );
 ```
 
@@ -81,4 +81,122 @@ CREATE TABLE users (
     -   Since each id will then be unique, we use it as the `PRIMARY KEY`, this is the unique identifier for each item in the table
     -   We end the line with a comma, to indicate the start of the next property (or column)
 
--   `first_name VARCHAR(255),`
+-   `first_name VARCHAR(255),` and `last_name VARCHAR(255),`
+    -   Naming convention is similar to HTML, all lowercase, but instead of `-` you use `_` between words
+    -   SQL is more specific than JavaScript. Instead of generic `string` we have `VARCHAR`
+    -   `VARCHAR` stands for variable character, and you can set an upper limit to the acceptable length
+    -   For shorter things, like names or emails, common practice is to set the limit to 255, since that is one byte of data
+    -   As soon as you add a 266th character, an entire second byte of data would be needed. If you have millions of users, this can really add up
+-   `age INT`
+    -   type `INT` stands for integer, or a whole number with no decimal points
+    -   note the lack of trailing comma, same as JSON
+-   `);`
+    -   And a closing `)` to indicate the end of our table schema
+    -   Like JS, SQL only reads new queries from `;`. So you can space each line however you want
+    -   There are common conventions that we'll cover as we go
+
+## INSERT INTO
+
+-   Now this table exists, but it's empty (show tables tab)
+-   To add new users, we need to INSERT
+    -   This is C in our CRUD operations
+
+```sql
+INSERT INTO users (first_name, last_name, age) VALUES ('John', 'Doe', 18);
+
+INSERT INTO users (first_name, last_name, age) VALUES ('Bob', 'Dylan', 30);
+
+INSERT INTO users (first_name, last_name, age) VALUES ('Jane', 'Doe', 25);
+```
+
+-   Let's break down the syntax
+    -   `INSERT INTO` our SQL command
+    -   `users` name of the table we want to insert into
+    -   `(first_name, last_name, age) ` encapsulated in `()` we give the column names
+    -   `VALUES` indicates each column will have the following value
+    -   `('John', 'Doe', 18)` strings in single quotes (varies based on which version of SQL using), numbers without quotes. In same order as column names
+    -   `;` indicate end of the query
+
+## SELECT
+
+-   To read from out database we use SELECT
+
+```sql
+SELECT *
+FROM users;
+```
+
+-   `SELECT` - again, our SQL command
+-   `*` - this is like a wildcard, it means select all of the columns that `users` has
+-   `FROM users` tells us which table to select from
+
+### Only grab some columns
+
+-   If we only need some information, we can specify which columns to `SELECT`, separated by commas
+
+```sql
+SELECT first_name, last_name
+FROM users;
+```
+
+### WHERE
+
+-   We can also specify conditions to be met. This is kind of like `if` in JS
+
+```sql
+SELECT *
+FROM users
+WHERE age > 18;
+```
+
+### AND
+
+-   Just like in JS we have `&&`, we can chain conditions in SQL
+    -   Again, note the use of single quotes in Postgres
+
+```sql
+SELECT *
+FROM users
+WHERE age > 18
+AND last_name = 'Doe';
+```
+
+### ORDER BY
+
+-   We can also order our data, similar to JS `sort`
+-   `DESC` (descending) is highest-lowest, `ASC` (ascending) is lowest-highest
+
+```sql
+SELECT *
+FROM users
+ORDER BY age DESC;
+```
+
+-   Can also sort alphabetically
+
+```sql
+SELECT *
+FROM users
+ORDER BY first_name ASC;
+```
+
+### LIMIT
+
+-   We can also limit the number of results
+    -   Remember that `limit` query some APIs had?
+    -   This can be very useful for things like pagination
+
+```sql
+SELECT *
+FROM users
+WHERE age > 18
+AND last_name = 'Doe'
+LIMIT 1;
+```
+
+### Let's play around a little bit
+
+-   Spoiler, but the duckpond is made in MongoDB, but if we wanted to make it in SQL...
+-   How could we create a `ducks` table that's structured like our original ducks with `id`, `name`, `quote`, and `img_url`?
+-   Create some ducks?
+-   Read the ducks?
