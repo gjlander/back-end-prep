@@ -274,8 +274,114 @@ server.listen(port, () =>
 
 ## fs module
 
+## writeFile
+
 -   We've got three flavours
 
 ### Synchronous
 
 -   As the name implies, this will create synchronous code. Your code will wait until the file is written to execute the next line
+-   First we import the `writeFileSync` function
+
+```js
+import { writeFileSync } from 'fs';
+```
+
+-   Even though this is synchronous, there is the potential for errors (i.e We fail to write the fail)
+-   Anytime an error could be thrown, we want to be in a try/catch block
+-   Inside the catch, we'll simply log the error
+
+```js
+try {
+} catch (error) {
+    console.error('there was an error:', error.message);
+}
+```
+
+-   Now inside of the try block we call our function
+-   The first argument is the file name we want and/or the path. If just a file name is given, it will be nested in the same directory as the file that called it.
+-   The second argument is what should be written to the file
+-   If everything works, we log success
+
+```js
+try {
+    writeFileSync('shrek.txt', 'Shrek is love, Shrek is life');
+    console.log('successfully created shrek.txt'); // This line only executes after the previous one is done
+} catch (error) {
+    console.error('there was an error:', error.message);
+}
+```
+
+-   There's a visual delay, so we don't see the file in our editor until after the log, but our entire script is waiting until that line is done to keep going.
+
+### Callbacks
+
+-   By making use of callbacks, we can pass this off to the event loop and allow our code to keep running
+    -   For more on the event loop, check out the video in JS Runtime Environment
+-   Instead of `writeFileSync` we use `writeFile`
+-   `writeFile` takes an additional argument, which is the callback
+-   It gets passed an error object if an error occurs, so we can simply check for it
+-   Then our code isn't being blocked by the file writing anymore
+
+```js
+import { writeFileSync, writeFile } from 'fs';
+// callback
+writeFile('shrek.txt', 'Shrek is love, Shrek is life', (err) => {
+    if (err) {
+        console.error('there was an error:', err.message);
+    } else {
+        console.log('successfully created shrek.txt');
+    }
+});
+console.log(`Technically speaking, if the creation of the file takes a bit, 
+we will see this in the console before the completion message!`);
+```
+
+### Promises
+
+-   Newer versions of Node allow us to work with Promises, which means we can await and write cleaner code that looks synchronous
+-   It comes to personal taste, but from here out I'll be uses Promises when possible
+-   It's imported from a different module
+
+```js
+import { writeFile } from 'fs/promises';
+```
+
+-   Then this will look like our sync version, but with await it won't block our code
+    -   Remember ES6 modules give us access to top-level await
+
+```js
+// promises
+try {
+    await writeFile('shrek.txt', 'Shrek is love, Shrek is life');
+    console.log('successfully created shrek.txt');
+} catch (error) {
+    console.error('there was an error:', error.message);
+}
+```
+
+## readFile
+
+-   In addition to writing files, we can read the contents of a file
+
+```js
+import { readFile } from 'fs/promises';
+```
+
+-   Again, inside of a try/catch block we await readFile, and store the return on a variable
+    -   the return being the contents of the file
+-   First arg is the file name and maybe path, second is the encoding
+
+```js
+try {
+    const fileContent = await readFile('shrek.txt', 'utf8');
+    console.log(fileContent);
+} catch (error) {
+    console.error('there was an error:', error.message);
+}
+```
+
+## Pain points for exercise
+
+-   Formatting directory and file names with Date
+-
