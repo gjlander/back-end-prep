@@ -116,9 +116,9 @@ CREATE TABLE ducks (
 ```sql
 CREATE TABLE ducks (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL UNIQUE,
     img_url VARCHAR(510) NOT NULL,
-    quote VARCHAR(510) DEFAULT 'I'', here to help!',
+    quote VARCHAR(510) DEFAULT 'I''m, here to help!',
     owner INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -380,8 +380,3 @@ try {
     console.error('there was an error:', error.message);
 }
 ```
-
-## Pain points for exercise
-
--   Formatting directory and file names with Date
--
