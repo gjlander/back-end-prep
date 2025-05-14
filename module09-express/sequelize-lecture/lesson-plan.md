@@ -364,6 +364,147 @@ if (!duck) return res.status(404).json({ error: 'Duck not found' });
 await duck.destroy();
 ```
 
-## Creating Relationships/associations
+## Creating Relationships/[associations](https://sequelize.org/docs/v6/core-concepts/assocs/)
 
 -   Pay special attention to this, since it's not in the LMS
+-   We will want a one-to-many relationship
+-   In order for this to work, we'll have to restructure some things
+-   We'll comment out `User.sync()` and `Duck.sync()` and put our associations in a separate file
+
+### `db/associations.js`
+
+-   import our models and `sequelize` instance
+
+```js
+import User from '../models/User.js';
+import Duck from '../models/Duck.js';
+import sequelize from './index.js';
+```
+
+-   User has many ducks
+
+```js
+User.hasMany(Duck);
+```
+
+-   Duck belongs to User with config
+    -   must have relationship (FK)
+    -   on delete cascade
+
+```js
+Duck.belongsTo(User, {
+    foreignKey: {
+        allowNull: false,
+    },
+    onDelete: 'CASCADE',
+});
+```
+
+-   Then sync all models at once using the instance
+
+```js
+sequelize.sync();
+```
+
+### `index.js`
+
+-   Import assocations for the side effect of creating the association, and syncing our models
+
+```js
+// import './db/index.js';
+import './db/associations.js';
+```
+
+## Let's drop our ducks table now, and make some adjustments to createDuck
+
+-   We'll also drop users and make a new one
+-   We have a userId property now, that cannot be null, so let's add it to the body
+
+```js
+const createDuck = async (req, res) => {
+    try {
+        const { userId, name, imgUrl, quote } = req.body;
+
+        if ((!userId, !name || !imgUrl)) {
+            return res
+                .status(400)
+                .json({ error: 'name and imgUrl are required' });
+        }
+        const newDuck = await Duck.create({ userId, name, imgUrl, quote });
+        res.status(201).json(newDuck);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+```
+
+-   Let's make a duck
+
+```json
+{
+    "userId": 1,
+    "name": "Captain Quack Sparrow",
+    "imgUrl": "https://www.veniceduckstore.it/cdn/shop/products/Captain-Quack-Rubber-Duck-slant.jpg",
+    "quote": "You'll always remember this as the day you almost squeezed Captain Quack Sparrow!"
+}
+```
+
+-   And a second duck
+
+```json
+{
+    "userId": 1,
+    "name": "Sir Quacks-a-lot",
+    "imgUrl": "https://cdn11.bigcommerce.com/s-nf2x4/images/stencil/1280x1280/products/430/7841/Knight-Rubber-Duck-Yarto-2__93062.1576270637.jpg?c=2"
+}
+```
+
+## Now let's populate our user
+
+### First we have to import the user
+
+```js
+import Duck from '../models/Duck.js';
+import User from '../models/User.js';
+```
+
+### The include keyword will populate our data:
+
+```js
+const getDucks = async (req, res) => {
+    try {
+        const ducks = await Duck.findAll({ include: User });
+        res.json(ducks);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+```
+
+-   It adds a new propery
+-   We can add that to any route we want
+
+## And do the same for users
+
+### Initially, user doesn't show any data about ducks
+
+-   Import the duck model
+-   Use include
+
+```js
+import User from '../models/User.js';
+import Duck from '../models/Duck.js';
+
+export const getUsers = async (req, res) => {
+    try {
+        const users = await User.findAll({ include: Duck });
+        res.json(users);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+```
+
+-   Adds property that is plural version of the model name
+
+### If we look at the logs we can see how complicated the queries are getting, nice to have an ORM huh?

@@ -1,8 +1,9 @@
 import Duck from '../models/Duck.js';
+import User from '../models/User.js';
 const getAllDucks = async (req, res) => {
     try {
         // const { rows } = await pool.query('SELECT * from wild_ducks;');
-        const ducks = await Duck.findAll();
+        const ducks = await Duck.findAll({ include: User });
         res.json(ducks);
     } catch (error) {
         console.error(error);
@@ -15,7 +16,7 @@ const getAllDucks = async (req, res) => {
 
 const createDuck = async (req, res) => {
     try {
-        const { name, imgUrl, quote } = req.body;
+        const { userId, name, imgUrl, quote } = req.body;
         if (!name || !imgUrl)
             return res.status(400).json({ error: 'Missing required fields' });
 
@@ -25,7 +26,7 @@ const createDuck = async (req, res) => {
         //     `INSERT INTO wild_ducks (name, img_url, quote) VALUES ($1, $2, $3) RETURNING *`,
         //     [name, imgUrl, quote]
         // );
-        const newDuck = await Duck.create({ name, imgUrl, quote });
+        const newDuck = await Duck.create({ userId, name, imgUrl, quote });
         res.status(201).json(newDuck);
     } catch (error) {
         console.error(error);

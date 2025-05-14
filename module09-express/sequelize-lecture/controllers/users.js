@@ -1,8 +1,9 @@
 import User from '../models/User.js';
+import Duck from '../models/Duck.js';
 
 export const getUsers = async (req, res) => {
     try {
-        const users = await User.findAll();
+        const users = await User.findAll({ include: Duck });
         res.json(users);
     } catch (error) {
         res.status(500).json({ error: error.message });

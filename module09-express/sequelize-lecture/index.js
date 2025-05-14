@@ -1,5 +1,6 @@
 import express from 'express';
-import './db/index.js';
+// import './db/index.js';
+import './db/associations.js';
 import {
     getAllDucks,
     createDuck,
