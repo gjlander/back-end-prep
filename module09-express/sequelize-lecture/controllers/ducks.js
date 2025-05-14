@@ -1,8 +1,9 @@
 import Duck from '../models/Duck.js';
 const getAllDucks = async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * from wild_ducks;');
-        res.json(rows);
+        // const { rows } = await pool.query('SELECT * from wild_ducks;');
+        const ducks = await Duck.findAll();
+        res.json(ducks);
     } catch (error) {
         console.error(error);
 
@@ -18,12 +19,13 @@ const createDuck = async (req, res) => {
         if (!name || !imgUrl)
             return res.status(400).json({ error: 'Missing required fields' });
 
-        const {
-            rows: [newDuck],
-        } = await pool.query(
-            `INSERT INTO wild_ducks (name, img_url, quote) VALUES ($1, $2, $3) RETURNING *`,
-            [name, imgUrl, quote]
-        );
+        // const {
+        //     rows: [newDuck],
+        // } = await pool.query(
+        //     `INSERT INTO wild_ducks (name, img_url, quote) VALUES ($1, $2, $3) RETURNING *`,
+        //     [name, imgUrl, quote]
+        // );
+        const newDuck = await Duck.create({ name, imgUrl, quote });
         res.status(201).json(newDuck);
     } catch (error) {
         console.error(error);
@@ -38,9 +40,10 @@ const getDuckById = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const {
-            rows: [duck],
-        } = await pool.query('SELECT * from wild_ducks WHERE id=$1;', [id]);
+        // const {
+        //     rows: [duck],
+        // } = await pool.query('SELECT * from wild_ducks WHERE id=$1;', [id]);
+        const duck = await Duck.findByPk(id);
 
         if (!duck) return res.status(404).json({ error: 'Duck not found' });
 
@@ -66,15 +69,17 @@ const updateDuck = async (req, res) => {
         if (!name || !imgUrl || !quote)
             return res.status(400).json({ error: 'Missing required fields' });
 
-        const {
-            rows: [duck],
-        } = await pool.query(
-            'UPDATE wild_ducks SET name = $1, img_url = $2, quote = $3 WHERE id = $4 RETURNING *;',
-            [name, imgUrl, quote, id]
-        );
+        // const {
+        //     rows: [duck],
+        // } = await pool.query(
+        //     'UPDATE wild_ducks SET name = $1, img_url = $2, quote = $3 WHERE id = $4 RETURNING *;',
+        //     [name, imgUrl, quote, id]
+        // );
+        const duck = await Duck.findByPk(id);
 
         if (!duck) return res.status(404).json({ error: 'Duck not found' });
 
+        await duck.update({ name, imgUrl, quote });
         res.json(duck);
     } catch (error) {
         console.error(error);
@@ -89,7 +94,12 @@ const deleteDuck = async (req, res) => {
     try {
         const { id } = req.params;
 
-        await pool.query('DELETE from wild_ducks WHERE id=$1;', [id]);
+        // await pool.query('DELETE from wild_ducks WHERE id=$1;', [id]);
+        const duck = await Duck.findByPk(id);
+
+        if (!duck) return res.status(404).json({ error: 'Duck not found' });
+
+        await duck.destroy();
 
         res.json({ message: `Duck deleted successfully` });
     } catch (error) {

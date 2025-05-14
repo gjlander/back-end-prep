@@ -315,3 +315,55 @@ export default Duck;
 
 -   Instead of `pool`, we import our `Duck` model
     -   Already our `ducks` table has been made
+
+#### Get All ducks
+
+-   simply replace the raw query with out `findAll()` method
+    -   For now this gives us an empty array
+
+```js
+const ducks = await Duck.findAll();
+res.json(ducks);
+```
+
+#### Create Duck
+
+-   Same deal, no more raw SQL queries
+
+```js
+const newDuck = await Duck.create({ name, imgUrl, quote });
+```
+
+#### Get Duck by Id
+
+```js
+const duck = await Duck.findByPk(id);
+```
+
+#### Update duck
+
+-   slightly different, we need 2 steps for this one
+
+```js
+const duck = await Duck.findByPk(id);
+
+if (!duck) return res.status(404).json({ error: 'Duck not found' });
+
+await duck.update({ name, imgUrl, quote });
+```
+
+#### Delete duck
+
+-   With paranoid on, duck still exists, but won't show up in our endpoints
+
+```js
+const duck = await Duck.findByPk(id);
+
+if (!duck) return res.status(404).json({ error: 'Duck not found' });
+
+await duck.destroy();
+```
+
+## Creating Relationships/associations
+
+-   Pay special attention to this, since it's not in the LMS
