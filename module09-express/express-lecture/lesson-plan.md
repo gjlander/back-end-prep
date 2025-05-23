@@ -233,6 +233,7 @@ app.listen(port, () => console.log(`Server is running on port ${port}`));
 
 -   Because the body of a request could in theory contain all kinds of data types, we have to tell our app that we are always expecting JSON. Once we do, express adds a `body` property to the request object that lets us access that data
     -   Order matters, this needs to be above all of the individual routes
+    -   Note that this is for the `request` body, we still have to set if the `response` will be JSON
 
 ```js
 app.use(express.json());
@@ -344,6 +345,21 @@ const { id } = req.params;
 await pool.query('DELETE from wild_ducks WHERE id=$1;', [id]);
 
 res.json({ message: `Duck deleted successfully` });
+```
+
+## `index.js` cleanup - using `.route()`
+
+-   We could stop here, but there's one more improvement we can make to our code organization.
+-   Since we have several methods that go to the same route, we're currently copy/pasting the route. Hopefully you're anti-copy/paste instincts are kicking in
+-   To prevent that, we can use the `route` method to define the route, and then just add the methods, like so
+
+```js
+app.route('/wild-ducks').get(getAllDucks).post(createDuck);
+
+app.route('/wild-ducks/:id')
+    .get(getDuckById)
+    .put(updateDuck)
+    .delete(deleteDuck);
 ```
 
 #### We'll continue to expand on working with Express in the coming weeks, but this is enough to have a basic RESTful API with the same functionality we had in our vanilla Node version. So now your task is to refactor your first RESTful API using Express

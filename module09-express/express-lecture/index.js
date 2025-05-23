@@ -12,11 +12,11 @@ const port = 3000;
 
 app.use(express.json());
 
-app.get('/wild-ducks', getAllDucks);
-app.post('/wild-ducks', createDuck);
+app.route('/wild-ducks').get(getAllDucks).post(createDuck);
 
-app.get('/wild-ducks/:id', getDuckById);
-app.put('/wild-ducks/:id', updateDuck);
-app.delete('/wild-ducks/:id', deleteDuck);
+app.route('/wild-ducks/:id')
+    .get(getDuckById)
+    .put(updateDuck)
+    .delete(deleteDuck);
 
 app.listen(port, () => console.log(`Server is running on port ${port}`));

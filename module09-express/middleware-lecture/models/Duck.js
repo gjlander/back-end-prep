@@ -19,6 +19,5 @@ const Duck = sequelize.define(
     },
     { paranoid: true }
 );
-// Duck.sync();
 
 export default Duck;
