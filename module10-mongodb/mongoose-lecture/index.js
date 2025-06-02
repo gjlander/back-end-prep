@@ -1,5 +1,5 @@
 import express from 'express';
-import './db/associations.js';
+import './db/index.js';
 import duckRouter from './routers/duckRouter.js';
 import userRouter from './routers/userRouter.js';
 import errorHandler from './middleware/errorHandler.js';
