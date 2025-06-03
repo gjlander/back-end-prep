@@ -175,6 +175,22 @@ export const createUser = async (req, res) => {
 - Especially since we're outside of an SQL database, if we want date consistency we really have to check for it. MongoDB doesn't care if the documents hold a certain shape, but we do. So we use Mongoose, but also Zod and other validation checks
 - Mongoose is our last line of defense, but ideally no request makes it that far that won't be accepted
 
+### A special note about ObjectIds
+
+- As mentioned, an ObjectId is a special object from MongoDB. The string from params will get converted into an ObjectId by Mongoose, but that only works if it follows Object Id rules
+  - It is 24 characters long
+  - It is hexadecimal (uses 0-9 and A-F to represent 0-15 )
+- Because we know the pattern it's supposed to match, we could write a complex regex to test against, but luckily `mongoose` provides a helpful utility function to test if something is a valid Object Id
+  - aptly named `isValidObjectId`
+
+#### So we can add a validation check on our dynamic routes to see if it's a valid id
+
+- import it
+
+```js
+import { isValidObjectId } from 'mongoose';
+```
+
 #### `getUserById`
 
 - `findByPK` becomes `findById`
@@ -184,6 +200,7 @@ export const getUserById = async (req, res) => {
   const {
     params: { id }
   } = req;
+  if (!isValidObjectId(id)) throw new Error('Invalid id', { cause: 400 });
   const user = await User.findById(id);
   if (!user) throw new Error('User not found', { cause: 404 });
   res.json(user);
@@ -201,7 +218,7 @@ export const updateUser = async (req, res) => {
     sanitizedBody: { firstName, lastName, email },
     params: { id }
   } = req;
-
+  if (!isValidObjectId(id)) throw new Error('Invalid id', { cause: 400 });
   const user = await User.findByIdAndUpdate(id, req.sanitizedBody, { new: true });
   if (!user) throw new Error('User not found', { cause: 404 });
 
@@ -218,6 +235,7 @@ export const deleteUser = async (req, res) => {
   const {
     params: { id }
   } = req;
+  if (!isValidObjectId(id)) throw new Error('Invalid id', { cause: 400 });
   const user = await User.findByIdAndDelete(id);
 
   if (!user) throw new Error('User not found', { cause: 404 });
@@ -271,6 +289,7 @@ owner: {
 ### Update duck controllers
 
 - Can delete `User` model import
+- add `ObjectId` import
 
 #### `getAllDucks`
 
@@ -284,6 +303,13 @@ const getAllDucks = async (req, res) => {
 ```
 
 #### `createDuck`
+
+```js
+const createDuck = async (req, res) => {
+  const newDuck = await Duck.create(req.sanitizedBody);
+  res.status(201).json(newDuck);
+};
+```
 
 - We will need to update our Zod `duckSchema` to include an owner
 
@@ -311,6 +337,8 @@ const getAllDucks = async (req, res) => {
 const getDuckById = async (req, res) => {
   const { id } = req.params;
 
+  if (!isValidObjectId(id)) throw new Error('Invalid id', { cause: 400 });
+
   const duck = await Duck.findById(id).populate('owner', 'firstName lastName');
 
   if (!duck) throw new Error('Duck not found', { cause: 404 });
@@ -325,17 +353,75 @@ const getDuckById = async (req, res) => {
 
 ```js
 const updateDuck = async (req, res) => {
-  // const { userId } = req;
   const { id } = req.params;
-  const { owner, name, imgUrl, quote } = req.sanitizedBody;
+
+  if (!isValidObjectId(id)) throw new Error('Invalid id', { cause: 400 });
 
   const duck = await Duck.findByIdAndUpdate(id, req.sanitizedBody, { new: true });
 
   if (!duck) throw new Error('Duck not found', { cause: 404 });
 
-  // if (userId !== duck.user.id) throw new Error('You are not authorized to update this duck', { cause: 403 });
-
   const duckWithOwner = await duck.populate('owner', 'firstName lastName');
   res.json(duckWithOwner);
+};
+```
+
+#### `deleteDuck`
+
+```js
+const deleteDuck = async (req, res) => {
+  const { id } = req.params;
+
+  const duck = await Duck.findByIdAndDelete(id);
+
+  if (!duck) throw new Error('Duck not found', { cause: 404 });
+
+  res.json({ message: `Duck deleted successfully` });
+};
+```
+
+## A note on read only queries (`GET` requests)
+
+- By default, using Mongoose to query our database it will return an instance of the `Mongoose Document` class
+- These can be pretty heavy, much heavier than plain old Vanilla JavaScript objects, because they keep track of internal state, and give us access to all of the class methods to update the document
+- For editing (updating or deleting) we need this, but for read-only operations (i.e. GET requests), we don't need this overhead.
+- Mongoose gives us the (lean option)[https://mongoosejs.com/docs/tutorials/lean.html] for this
+- add it to `getUsers` and `getUserById`
+
+```js
+export const getUsers = async (req, res) => {
+  const users = await User.find().lean();
+  res.json(users);
+};
+
+export const getUserById = async (req, res) => {
+  const {
+    params: { id }
+  } = req;
+  const user = await User.findById(id).lean();
+  if (!isValidObjectId(id)) throw new Error('Invalid id', { cause: 400 });
+  if (!user) throw new Error('User not found', { cause: 404 });
+  res.json(user);
+};
+```
+
+- and `getAllDucks` and `getDuckById`
+  - goes before `populate`
+
+```js
+const getAllDucks = async (req, res) => {
+  const ducks = await Duck.find().lean().populate('owner', 'firstName lastName');
+  res.json(ducks);
+};
+const getDuckById = async (req, res) => {
+  const { id } = req.params;
+
+  if (!isValidObjectId(id)) throw new Error('Invalid id', { cause: 400 });
+
+  const duck = await Duck.findById(id).lean().populate('owner', 'firstName lastName');
+
+  if (!duck) throw new Error('Duck not found', { cause: 404 });
+
+  res.json(duck);
 };
 ```
