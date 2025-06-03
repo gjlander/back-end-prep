@@ -15,7 +15,6 @@ const userSchema = z.object({
   firstName: z.string().min(1, 'First name is required.'),
   lastName: z.string().min(1, 'Last name is required.'),
   email: z.email('Invalid email.'),
-  password: z.string().min(8),
   location: locationSchema.optional(),
   myPond: z.array(pondDuckSchema).optional()
 });

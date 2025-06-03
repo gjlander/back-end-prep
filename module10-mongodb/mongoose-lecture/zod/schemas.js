@@ -12,7 +12,7 @@ const duckSchema = z.object({
     hostname: z.regexes.domain
   }),
   quote: z.string().optional(),
-  owner: z.string().min(1)
+  owner: z.string().length(24)
 });
 
 export { userSchema, duckSchema };

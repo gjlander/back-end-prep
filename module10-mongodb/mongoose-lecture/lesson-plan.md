@@ -311,10 +311,11 @@ const createDuck = async (req, res) => {
 };
 ```
 
-- We will need to update our Zod `duckSchema` to include an owner
+- We will need to update our Zod `duckSchema` to include an owner instead of `userId`
+  - Basic check that it is 24 characters long before final check from `isValidObjectId`
 
 ```js
-owner: z.string().min(1);
+owner: z.string().length(24);
 ```
 
 - Uncomment and test
