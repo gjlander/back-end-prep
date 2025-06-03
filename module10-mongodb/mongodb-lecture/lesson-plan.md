@@ -23,7 +23,7 @@
   - Provider doesn't matter
   - Region should be default Frankfurt, but double check it
 - Connect to Cluster
-  - Copy password and save it somewhere ta5Ay2SbuyZ1HTYi
+  - Copy password and save it somewhere dfXSZ1N8raJfDblA
   - Choose Compass, and download it
   - Copy connection string
 - Add network access from anywhere
