@@ -7,6 +7,8 @@ const userSchema = z.object({
   password: z.string().min(8)
 });
 
+const signInSchema = userSchema.omit({ firstName: true, lastName: true });
+
 const duckSchema = z.object({
   name: z.string().min(1, 'Your duck must have a name'),
   imgUrl: z.url({
@@ -17,4 +19,4 @@ const duckSchema = z.object({
   owner: z.string().min(1)
 });
 
-export { userSchema, duckSchema };
+export { userSchema, duckSchema, signInSchema };
