@@ -27,20 +27,18 @@ const userSchema = new Schema(
 - And update `zod`
 
 ```js
-const locationSchema = z
-  .object({
-    country: z.string(),
-    zipCode: z.string(),
-    city: z.string()
-  })
-  .optional();
+const locationSchema = z.object({
+  country: z.string(),
+  zipCode: z.string(),
+  city: z.string()
+});
 
 const userSchema = z.object({
   firstName: z.string().min(1, 'First name is required.'),
   lastName: z.string().min(1, 'Last name is required.'),
   email: z.email('Invalid email.'),
   password: z.string().min(8),
-  location: locationSchema
+  location: locationSchema.optional()
 });
 ```
 
