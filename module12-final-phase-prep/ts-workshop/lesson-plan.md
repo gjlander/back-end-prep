@@ -277,3 +277,20 @@ const addNums = (num1: number, num2: number) => {
 - This essentially says to skip `node_modules` when checking
 
 ##### The needs for each project means you might adjust these settings. This is where trying to implement TS into an actual project can become a pain, and why further education via docs and/or tutorials is definitely needed before trying to do a full project in TS
+
+## Third-party libraries
+
+- Many modern libraries are built TS first, meaning they are built in TS, or with TS in mind, so the package includes the needed TS types by default. But many older libraries, or any library that doesn't maintain their own type declarations, you have to install them separately
+
+### With express
+
+- If we get an express boilerplate going, we an error with out `express` import
+- But it tells us what to do. Because express is built in JS, the maintainers of the library didn't declare any types. Luckily, any package that widely used has type declarations, so we just install them
+- There's much more to consider when trying to use TS with Express, so definitely find a more in depth course before trying it yourself - learn from my pain
+
+### React Project with Vite
+
+- To setup React with TS, you just choose it from Vite
+- It will generate the config file with reasonable presets
+
+#### This is just introduction, but gives you a general overview of the principles involved when working with TS
