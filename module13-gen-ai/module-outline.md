@@ -33,7 +33,16 @@
 
 # Day 3 - Incorporate into Travel Journal
 
+## Pre-lecture
+
+- Integrate AI simple server into Travel Journal API
+- Add chatbot to SPA
+- Update system instruction (refer to Gemini docs on how)
+
 ## Lecture
+
+- Demo that initial basic integration
+- Add context for signed in users with caching
 
 - Structured output?
 - Adding context?
