@@ -1,8 +1,8 @@
-# Outline
+# MongoDB
 
 ## Go through NoSQL Databases article
 
-## Go through MongoDB slides
+## Go through MongoDB [slides](https://docs.google.com/presentation/d/15IWjrCTpSN56i1TkjaJARdldWfVSGFbN1EvdJpIq75g/edit?slide=id.p1#slide=id.p1)
 
 ## Mongo Atlas and Mongo Compass
 
@@ -53,7 +53,7 @@
 
 - Can manually update via the GUI in addition to the shell
 
-# Mongo Compass Checklist
+## Mongo Compass Checklist
 
 - Installed, and connect to a project
 - Copy connection string
@@ -61,3 +61,7 @@
 - Manually update a field with GUI
 - Bonus
   - Run CRUD queries
+
+## CRUD Operations with Mongo
+
+-
