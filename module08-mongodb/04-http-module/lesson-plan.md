@@ -250,3 +250,153 @@ if (method === 'GET') {
 ```
 
 - We have our first API endpoint!
+
+### CREATE new user
+
+- for creating a new user we can build on the body handling logic in the tutorial
+- The body comes in a readable stream, which is kind of a pain to process, but we'll manage
+- First, let's create a variable to put all of the chunks together
+
+```ts
+let body = '';
+```
+
+- Then as each new chunk comes in, we add it to our string
+
+```ts
+req.on('data', chunk => {
+	body += chunk.toString();
+});
+```
+
+- Once we have all of the data, we can parse the body, then send our response
+
+```ts
+if (method === 'POST') {
+	let body = '';
+
+	req.on('data', chunk => {
+		body += chunk.toString();
+	});
+	req.on('end', () => {
+		const parsedBody = JSON.parse(body);
+		console.log(parsedBody);
+		createResponse(res, 201, 'POST request on /users');
+	});
+	return;
+}
+```
+
+- Now how can we actually create a user now?
+
+```ts
+if (method === 'POST') {
+	let body = '';
+
+	req.on('data', chunk => {
+		body += chunk.toString();
+	});
+	req.on('end', async () => {
+		const parsedBody = JSON.parse(body);
+		console.log(parsedBody);
+		const newUser = await User.create(parsedBody);
+		createResponse(res, 201, newUser);
+	});
+	return;
+}
+```
+
+#### Making a `parseJsonBody` function
+
+- It would be nice if we could create a utility function to parse the body, so we can use it in our PUT request as well
+- Since the operations for `req.on` are asynchronous, we're going to need to use Promises in order to move some of that logic outside of the callback function
+- We'll make a generic function here that will take the req as an argument
+
+```ts
+import http, {
+	type RequestListener,
+	type ServerResponse,
+	type IncomingMessage
+} from 'node:http';
+const parseJsonBody = <T>(req: IncomingMessage): Promise<T> => {
+	return new Promise();
+};
+```
+
+- The Promise constructor can take a callback, where we tell it how to resolve, and how to reject
+
+```ts
+const parseJsonBody = <T>(req: IncomingMessage): Promise<T> => {
+	return new Promise((resolve, reject) => {});
+};
+```
+
+- Now we can move our body processing logic here
+
+```ts
+const parseJsonBody = <T>(req: IncomingMessage): Promise<T> => {
+	return new Promise((resolve, reject) => {
+		let body = '';
+
+		req.on('data', chunk => {
+			body += chunk.toString();
+		});
+		req.on('end', async () => {
+			const parsedBody = JSON.parse(body);
+			console.log(parsedBody);
+			const newUser = await User.create(parsedBody);
+			createResponse(res, 201, newUser);
+		});
+	});
+};
+```
+
+- But we don't want to send the response here, we just want this Promise to resolve to the parsed body, se we can use a try/catch block
+
+```ts
+const parseJsonBody = <T>(req: IncomingMessage): Promise<T> => {
+	return new Promise((resolve, reject) => {
+		let body = '';
+
+		req.on('data', chunk => {
+			body += chunk.toString();
+		});
+		req.on('end', () => {
+			try {
+				resolve(JSON.parse(body) as T);
+			} catch (error) {
+				reject(new Error('Invalid JSON'));
+			}
+		});
+	});
+};
+```
+
+- Then we can await this function to get our body
+
+```ts
+if (method === 'POST') {
+	const body = await parseJsonBody<UserType>(req);
+	console.log(body);
+	return createResponse(res, 201, 'Post on /users');
+}
+```
+
+- From here we simply pass it to `User.create()`
+
+```ts
+if (method === 'POST') {
+	const body = await parseJsonBody<UserType>(req);
+	// console.log(body);
+	const newUser = await User.create(body);
+	return createResponse(res, 201, newUser);
+}
+```
+
+### Getting a resource id
+
+- Finishing all of the endpoints will be up to you, but I want to address something else you'll encounter - how do we get the id from the URL?
+- POST with a user id and show the logs
+- We see we get a string with just the URL path, what string methods could we use to just get the id part? That's up to you
+
+#### As you've seen, working with vanilla Node HTTP module can be a bit clunky. We'll transition right away to Express tomorrow, but note today all of the things that have to be considered when building a RESTful API

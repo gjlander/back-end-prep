@@ -1,6 +1,33 @@
 import '#db';
 import { User, Duck } from '#models';
-import http, { type RequestListener, type ServerResponse } from 'node:http';
+import http, {
+	type RequestListener,
+	type ServerResponse,
+	type IncomingMessage
+} from 'node:http';
+
+type UserType = {
+	firstName: string;
+	lastName: string;
+	email: string;
+};
+
+const parseJsonBody = <T>(req: IncomingMessage): Promise<T> => {
+	return new Promise((resolve, reject) => {
+		let body = '';
+
+		req.on('data', chunk => {
+			body += chunk.toString();
+		});
+		req.on('end', () => {
+			try {
+				resolve(JSON.parse(body) as T);
+			} catch (error) {
+				reject(new Error('Invalid JSON'));
+			}
+		});
+	});
+};
 
 const createResponse = (
 	res: ServerResponse,
@@ -26,7 +53,10 @@ const requestHandler: RequestListener = async (req, res) => {
 			return createResponse(res, 200, users);
 		}
 		if (method === 'POST') {
-			return createResponse(res, 201, 'POST request on /users');
+			const body = await parseJsonBody<UserType>(req);
+			// console.log(body);
+			const newUser = await User.create(body);
+			return createResponse(res, 201, newUser);
 		}
 		return createResponse(res, 405, 'Method Not Allowed');
 	}
@@ -52,12 +82,6 @@ const port = 3000;
 server.listen(port, () =>
 	console.log(`Server running at http://localhost:${port}/`)
 );
-
-// type UserType = {
-// 	firstName: string;
-// 	lastName: string;
-// 	email: string;
-// };
 
 // try {
 // 	// CREATE
