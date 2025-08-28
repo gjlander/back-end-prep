@@ -421,6 +421,7 @@ export default model('Duck', duckSchema);
 ```
 
 - To define an `owner` for each duck, simply save the ObjectId of the `User`, and tell Mongoose which collection to search in
+  - Note that the `user` has no reference to the ducks it owns. Relationships are defined one-sided.
 
 ```ts
 owner: {
@@ -456,4 +457,53 @@ console.log(newDuck);
 const ducks = await Duck.find();
 
 console.log(ducks);
+```
+
+- If we want to include information about the owner, Mongoose makes that really easy for us with the `populate()` method. The first arg is the name of the property we want to populate
+
+```ts
+const ducks = await Duck.find().populate('owner');
+```
+
+- By default this will include the whole user, if we only want certain fields, we can pass them as a second arg to populate
+  - You pass the properties you want separated by a space
+
+```ts
+const ducks = await Duck.find().populate('owner', 'firstName lastName email');
+```
+
+#### Refer to article chart on when to use which
+
+### What about TypeScript?
+
+- Mongoose is TS friendly, we don't have to separately install the `@types` for it, and it will automatically create types for our schema for us.
+- The only place it needs some help is for creating users. If we try to create a new user with missing required fields, we do get our validation error, so thankfully the query is unsuccessful, but we get no warning from TS
+
+```ts
+const newUser = await User.create({
+	firstName: 'Zuko',
+	lastName: 'Fire'
+});
+console.log(newUser);
+```
+
+- To get that warning, we can create a type for the fields we need
+
+```ts
+type UserType = {
+	firstName: string;
+	lastName: string;
+	email: string;
+};
+```
+
+- And then use `create` with a generic. The error message is a bit crazy, but at least it's letting us know something is off
+
+```ts
+const newUser = await User.create<UserType>({
+	firstName: 'Zuko',
+	lastName: 'Fire',
+	email: 'zuko@fire.com'
+});
+console.log(newUser);
 ```

@@ -1,6 +1,12 @@
 import '#db';
 import { User, Duck } from '#models';
 
+type UserType = {
+	firstName: string;
+	lastName: string;
+	email: string;
+};
+
 try {
 	// CREATE
 	// const newUser = new User({
@@ -47,10 +53,14 @@ try {
 	// 	owner: '68b046de0f7e46123b038d5b'
 	// });
 	// console.log(newDuck);
-
-	const ducks = await Duck.find();
-
-	console.log(ducks);
+	// const newUser = await User.create<UserType>({
+	// 	firstName: 'Zuko',
+	// 	lastName: 'Fire',
+	// 	email: 'zuko@fire.com'
+	// });
+	// console.log(newUser);
+	// const ducks = await Duck.find().populate('owner', 'firstName lastName email');
+	// console.log(ducks);
 } catch (error) {
 	console.error(error);
 }
