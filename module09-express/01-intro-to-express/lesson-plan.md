@@ -116,9 +116,11 @@ app.get('/ducks', async (req, res) => {
 	try {
 		res.json({ message: 'GET all ducks' });
 	} catch (error) {
-		res.status(500).json({
-			error: error.message || 'Internal server error.'
-		});
+		if (error instanceof Error) {
+			res.status(500).json({ message: error.message });
+		} else {
+			res.status(500).json({ message: 'An unknown error occurred' });
+		}
 	}
 });
 ```
@@ -128,31 +130,15 @@ app.get('/ducks', async (req, res) => {
 ```js
 app.get('/ducks', async (req, res) => {
 	try {
-		const results = await pool.query('SELECT * from wild_ducks;');
-		res.json(results.rows);
+		const ducks = await Duck.find();
+
+		res.json(ducks);
 	} catch (error) {
-		console.error(error);
-
-		res.status(500).json({
-			error: error.message || 'Internal server error.'
-		});
-	}
-});
-```
-
-- Since we're only interested in the `rows` property, we can also just deconstruct it instead of dot notating
-
-```js
-app.get('/ducks', async (req, res) => {
-	try {
-		const { rows } = await pool.query('SELECT * from wild_ducks;');
-		res.json(rows);
-	} catch (error) {
-		console.error(error);
-
-		res.status(500).json({
-			error: error.message || 'Internal server error.'
-		});
+		if (error instanceof Error) {
+			res.status(500).json({ message: error.message });
+		} else {
+			res.status(500).json({ message: 'An unknown error occurred' });
+		}
 	}
 });
 ```
@@ -160,31 +146,35 @@ app.get('/ducks', async (req, res) => {
 #### Project organization - controllers folder
 
 - Getting all ducks isn't too long of a function, but some of the others get longer. To make this more readable as our app grows, instead of keeping this as an anonymous function, let's move all of our controllers into a separate folder, then import them
-- Make `controllers/wildDucks.js`
-  - import pool here instead and correct path
+- Make `controllers/ducks.ts`
+  - add to imports in `package.json`
+  - import Duck model here
   - give controller a name
-  - export it
+  - type it as RequestHandler
+  - re-export it
 
 ```js
-import pool from '../db/index.js';
+import type { RequestHandler } from 'express';
+import { Duck } from '#models';
 
-const getAllDucks = async (req, res) => {
+const getAllDucks: RequestHandler = async (req, res) => {
 	try {
-		const { rows } = await pool.query('SELECT * from wild_ducks;');
-		res.json(rows);
-	} catch (error) {
-		console.error(error);
+		const ducks = await Duck.find();
 
-		res.status(500).json({
-			error: error.message || 'Internal server error.'
-		});
+		res.json(ducks);
+	} catch (error) {
+		if (error instanceof Error) {
+			res.status(500).json({ message: error.message });
+		} else {
+			res.status(500).json({ message: 'An unknown error occurred' });
+		}
 	}
 };
 
 export { getAllDucks };
 ```
 
-- import it in `index.js`
+- import it in `app.ts`
 - Functionally this is exactly the same, but now if we add more resources they can be organize by file, making our app easier to maintain as it grows
 - Using our `getAllDucks` function as a boilerplate, let's export/import our controllers so we can stay in this file
 
@@ -227,97 +217,146 @@ app.listen(port, () => console.log(`Server is running on port ${port}`));
 app.use(express.json());
 ```
 
-```js
-const { name, imgUrl, quote } = req.body;
+- Now express will handle processing the JSON body, and add it as a `body` property. If there is not body in the request, it will be `undefined`
+  - test in Postman with and without body
+
+```ts
+const createDuck: RequestHandler = async (req, res) => {
+	try {
+		console.log(req.body);
+	} catch (error) {
+		if (error instanceof Error) {
+			res.status(500).json({ message: error.message });
+		} else {
+			res.status(500).json({ message: 'An unknown error occurred' });
+		}
+	}
+};
 ```
 
-- We'll go into more thorough validation checks later this week, but for now let's just confirm the needed properties exists and do an early return
+#### Typing a RequestHandler generic
+
+- The `RequestHandler` type is actually a generic function type. The generic takes in 4 types in this order
+  - Params: this would be the dynamic part of a route
+  - ResBody: the type of your response, defaults to `any`
+  - ReqBody: the type of the request, defaults to `any`
+  - Queries: any queries included in the URL
+- Since we know the body should include our duck properties, we can make a type, and pass it to the `ReqBody` parameter
+
+```ts
+type DuckType = {
+	name: string;
+	imgUrl: string;
+	quote: string;
+	owner: string;
+};
+
+const createDuck: RequestHandler<{}, {}, DuckType> = async (req, res) => {};
+```
+
+#### Validation checks
+
+- This is still just us telling TS, "Hey trust me bro", but it's a start
+- We'll go into more thorough validation checks later, but for now let's just confirm the needed properties exists and do an early return
+- First things first, check if there is a `body`
   - 400 means user client error
-  - Since quote has a default value, it is not required and we don't need to check for it
+  - We are returning `void`, but can use the return keyword to stop the function from continuing
 
 ```js
-if (!name || !imgUrl)
-	return res.status(400).json({ error: 'Missing required fields' });
+if (!req.body)
+	return res
+		.status(400)
+		.json({ error: 'Name, image URL, owner, and quote are required' });
 ```
 
-- From here, we can write our SQL statement, store the results, and return the new duck, with a 201 status
+- We then verify all of the required properties are there
 
-```js
-const results = await pool.query(
-	`INSERT INTO wild_ducks (name, img_url, quote) VALUES ($1, $2, $3) RETURNING *`,
-	[name, imgUrl, quote]
-);
-res.status(201).json(results.rows[0]);
+```ts
+if (!name || !imgUrl || !quote || !owner) {
+	return res
+		.status(400)
+		.json({ error: 'Name, image URL, owner, and quote are required' });
+}
 ```
 
-- How could I rewrite this using destructuring syntax?
+- From here, we can call create, and still pass our `DuckType`
 
-```js
-const {
-	rows: [newDuck]
-} = await pool.query(
-	`INSERT INTO wild_ducks (name, img_url, quote) VALUES ($1, $2, $3) RETURNING *`,
-	[name, imgUrl, quote]
-);
+```ts
+const newDuck = await Duck.create<DuckType>({ name, imgUrl, quote, owner });
+
 res.json(newDuck);
 ```
 
-- Either syntax is fine, it's up to you which feels more readable
-
 ### Get duck by id
 
-- The request object also has a `params` property (short for parameters). This is where the dynamic portion of a route will be found
+- The request object also has a `params` property (short for parameters). Since we have an `id`, we can type that in our generic
 
 ```js
 const { id } = req.params;
 ```
 
+- Mongoose has a helpful utility function to test if a string is a valid object id, so let's use it to validate the id here
+
+```ts
+if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid ID' });
+```
+
 - Again, we'll do more robust error handling later, but we can do another early return if no duck is found
 
-```js
-const {
-	rows: [duck]
-} = await pool.query('SELECT * from wild_ducks WHERE id=$1;', [id]);
+```ts
+const duck = await Duck.findById(id);
 
-if (!duck) return res.status(404).json({ error: 'Duck not found' });
+if (!duck) return res.status(404).json({ error: 'Duck Not Found' });
 
 res.json(duck);
 ```
 
 ### Update duck
 
-- For updating a duck, we'll need the body and params
-  - We could also use nested destructuring, but personally I prefer the first way
+- For updating a duck, we'll need the body and params, se we type them in our generic
 
-```js
-// const { id } = req.params;
-// const { name, imgUrl, quote } = req.body;
-
-const {
-	param: { id },
-	body: { name, imgUrl, quote }
-} = req;
+```ts
+const updateDuck: RequestHandler<{ id: string }, {}, DuckType> = async (
+	req,
+	res
+) => {};
 ```
 
-- Check for body content
-  - This time we need all updatable properties
+- We validate the body and the id
 
-```js
-if (!name || !imgUrl || !quote)
-	return res.status(400).json({ error: 'Missing required fields' });
+```ts
+if (!req.body)
+	return res
+		.status(400)
+		.json({ error: 'Name, image URL, owner, and quote are required' });
+const { name, imgUrl, quote, owner } = req.body;
+const { id } = req.params;
+
+if (!name || !imgUrl || !quote || !owner) {
+	return res
+		.status(400)
+		.json({ error: 'Name, image URL, owner, and quote are required' });
+}
+
+if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid ID' });
 ```
 
 - Update our query, and response, and add validation check
 
 ```js
-const {
-	rows: [duck]
-} = await pool.query(
-	'UPDATE wild_ducks SET name = $1, img_url = $2, quote = $3 WHERE id = $4 RETURNING *;',
-	[name, imgUrl, quote, id]
-);
+const duck =
+	(await Duck.findByIdAndUpdate) <
+	DuckType >
+	(id,
+	{
+		name,
+		imgUrl,
+		quote,
+		owner
+	},
+	{ new: true });
 
-if (!duck) return res.status(404).json({ error: 'Duck not found' });
+if (!duck) return res.status(404).json({ error: 'Duck Not Found' });
 
 res.json(duck);
 ```
@@ -329,13 +368,16 @@ res.json(duck);
 
 ```js
 const { id } = req.params;
+if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid ID' });
 
-await pool.query('DELETE from wild_ducks WHERE id=$1;', [id]);
+const found = await Duck.findByIdAndDelete(id);
 
-res.json({ message: `Duck deleted successfully` });
+if (!found) return res.status(404).json({ error: 'Duck Not Found' });
+
+res.json({ message: 'Duck deleted' });
 ```
 
-## `index.js` cleanup - using `.route()`
+## `app.ts` cleanup - using `.route()`
 
 - We could stop here, but there's one more improvement we can make to our code organization.
 - Since we have several methods that go to the same route, we're currently copy/pasting the route. Hopefully you're anti-copy/paste instincts are kicking in

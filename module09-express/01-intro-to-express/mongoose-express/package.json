@@ -16,6 +16,10 @@
 		"#models": {
 			"development": "./src/models/index.ts",
 			"default": "./dist/models/index.js"
+		},
+		"#controllers": {
+			"development": "./src/controllers/index.ts",
+			"default": "./dist/controllers/index.js"
 		}
 	},
 	"scripts": {
