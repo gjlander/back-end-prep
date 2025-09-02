@@ -323,19 +323,20 @@ const updateDuck: RequestHandler<{ id: string }, {}, DuckType> = async (
 ```
 
 - We validate the body and the id
+- Since the owner isn't an updatable property, we remove it
 
 ```ts
 if (!req.body)
 	return res
 		.status(400)
 		.json({ error: 'Name, image URL, owner, and quote are required' });
-const { name, imgUrl, quote, owner } = req.body;
+const { name, imgUrl, quote } = req.body;
 const { id } = req.params;
 
-if (!name || !imgUrl || !quote || !owner) {
+if (!name || !imgUrl || !quote) {
 	return res
 		.status(400)
-		.json({ error: 'Name, image URL, owner, and quote are required' });
+		.json({ error: 'Name, image URL, and quote are required' });
 }
 
 if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid ID' });
@@ -343,18 +344,16 @@ if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid ID' });
 
 - Update our query, and response, and add validation check
 
-```js
-const duck =
-	(await Duck.findByIdAndUpdate) <
-	DuckType >
-	(id,
+```ts
+const duck = (await Duck.findByIdAndUpdate)<DuckType>(
+	id,
 	{
 		name,
 		imgUrl,
-		quote,
-		owner
+		quote
 	},
-	{ new: true });
+	{ new: true }
+);
 
 if (!duck) return res.status(404).json({ error: 'Duck Not Found' });
 

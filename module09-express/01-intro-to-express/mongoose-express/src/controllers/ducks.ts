@@ -9,6 +9,8 @@ type DuckType = {
 	owner: string;
 };
 
+type UpdateDuckType = Omit<DuckType, 'owner'>;
+
 const getAllDucks: RequestHandler = async (req, res) => {
 	try {
 		const ducks = await Duck.find();
@@ -68,7 +70,7 @@ const getDuckById: RequestHandler<{ id: string }> = async (req, res) => {
 		}
 	}
 };
-const updateDuck: RequestHandler<{ id: string }, {}, DuckType> = async (
+const updateDuck: RequestHandler<{ id: string }, {}, UpdateDuckType> = async (
 	req,
 	res
 ) => {
@@ -77,10 +79,10 @@ const updateDuck: RequestHandler<{ id: string }, {}, DuckType> = async (
 			return res
 				.status(400)
 				.json({ error: 'Name, image URL, owner, and quote are required' });
-		const { name, imgUrl, quote, owner } = req.body;
+		const { name, imgUrl, quote } = req.body;
 		const { id } = req.params;
 
-		if (!name || !imgUrl || !quote || !owner) {
+		if (!name || !imgUrl || !quote) {
 			return res
 				.status(400)
 				.json({ error: 'Name, image URL, owner, and quote are required' });
@@ -89,13 +91,12 @@ const updateDuck: RequestHandler<{ id: string }, {}, DuckType> = async (
 		if (!isValidObjectId(id))
 			return res.status(400).json({ error: 'Invalid ID' });
 
-		const duck = await Duck.findByIdAndUpdate<DuckType>(
+		const duck = await Duck.findByIdAndUpdate<UpdateDuckType>(
 			id,
 			{
 				name,
 				imgUrl,
-				quote,
-				owner
+				quote
 			},
 			{ new: true }
 		);
