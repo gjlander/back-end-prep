@@ -7,6 +7,7 @@ import {
 	deleteDuck
 } from '#controllers';
 import { validateBody } from '#middleware';
+import { duckInputSchema, duckUpdateInputSchema } from '#schemas';
 const duckRouter = Router();
 
 const duckMiddleware: RequestHandler = (req, res, next) => {
@@ -22,12 +23,15 @@ const verifyToken: RequestHandler = (req, res, next) => {
 
 duckRouter.use(duckMiddleware);
 
-duckRouter.route('/').get(getAllDucks).post(validateBody('duck'), createDuck);
+duckRouter
+	.route('/')
+	.get(getAllDucks)
+	.post(validateBody(duckInputSchema), createDuck);
 
 duckRouter
 	.route('/:id')
 	.get(getDuckById)
-	.put(verifyToken, validateBody('duck'), updateDuck)
+	.put(verifyToken, validateBody(duckUpdateInputSchema), updateDuck)
 	.delete(deleteDuck);
 
 export default duckRouter;

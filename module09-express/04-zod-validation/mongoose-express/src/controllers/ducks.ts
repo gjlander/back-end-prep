@@ -1,43 +1,43 @@
 import type { RequestHandler } from 'express';
-import { isValidObjectId, type ObjectId } from 'mongoose';
 import { Duck } from '#models';
+import type { z } from 'zod/v4';
+import type {
+	duckInputSchema,
+	duckUpdateInputSchema,
+	duckSchema
+} from '#schemas';
 
-type DuckType = {
-	name: string;
-	imgUrl: string;
-	quote: string;
-	owner: string;
-};
+type DuckInputDTO = z.infer<typeof duckInputSchema>;
 
-type UpdateDuckType = Omit<DuckType, 'owner'>;
+type UpdateDuckDTO = z.infer<typeof duckUpdateInputSchema>;
 
-const getAllDucks: RequestHandler = async (req, res) => {
-	const ducks = await Duck.find();
+type DuckDTO = z.infer<typeof duckSchema>;
+
+const getAllDucks: RequestHandler<{}, DuckDTO[]> = async (req, res) => {
+	const ducks = await Duck.find().lean();
 
 	res.json(ducks);
 };
-const createDuck: RequestHandler<{}, {}, DuckType> = async (req, res) => {
-	if (!req.body)
-		throw new Error('Name, image URL, and quote are required', {
-			cause: 400
-		});
-
+const createDuck: RequestHandler<{}, DuckDTO, DuckInputDTO> = async (
+	req,
+	res
+) => {
 	const { name, imgUrl, quote, owner } = req.body;
 
-	if (!name || !imgUrl || !quote || !owner) {
-		throw new Error('Name, image URL, and quote are required', {
-			cause: 400
-		});
-	}
+	const newDuck = await Duck.create<DuckInputDTO>({
+		name,
+		imgUrl,
+		quote,
+		owner
+	});
 
-	const newDuck = await Duck.create<DuckType>({ name, imgUrl, quote, owner });
-
-	res.json(newDuck);
+	res.status(201).json(newDuck);
 };
-const getDuckById: RequestHandler<{ id: string }> = async (req, res) => {
+const getDuckById: RequestHandler<{ id: string }, DuckDTO> = async (
+	req,
+	res
+) => {
 	const { id } = req.params;
-
-	if (!isValidObjectId(id)) throw new Error('Invalid ID', { cause: 400 });
 
 	const duck = await Duck.findById(id);
 
@@ -45,28 +45,14 @@ const getDuckById: RequestHandler<{ id: string }> = async (req, res) => {
 
 	res.json(duck);
 };
-const updateDuck: RequestHandler<{ id: string }, {}, UpdateDuckType> = async (
-	req,
-	res
-) => {
-	if (!req.body) {
-		throw new Error('Name, image URL, and quote are required', {
-			cause: 400
-		});
-	}
+const updateDuck: RequestHandler<
+	{ id: string },
+	DuckDTO,
+	UpdateDuckDTO
+> = async (req, res) => {
 	const { name, imgUrl, quote } = req.body;
 	const { id } = req.params;
 	const { userId } = req;
-
-	// console.log(userId);
-
-	if (!name || !imgUrl || !quote) {
-		throw new Error('Name, image URL, and quote are required', {
-			cause: 400
-		});
-	}
-
-	if (!isValidObjectId(id)) throw new Error('Invalid ID', { cause: 400 });
 
 	const duck = await Duck.findById(id);
 
@@ -85,9 +71,11 @@ const updateDuck: RequestHandler<{ id: string }, {}, UpdateDuckType> = async (
 	await duck.save();
 	res.json(duck);
 };
-const deleteDuck: RequestHandler<{ id: string }> = async (req, res) => {
+const deleteDuck: RequestHandler<{ id: string }, { message: string }> = async (
+	req,
+	res
+) => {
 	const { id } = req.params;
-	if (!isValidObjectId(id)) throw new Error('Invalid ID', { cause: 400 });
 
 	const found = await Duck.findByIdAndDelete(id);
 
