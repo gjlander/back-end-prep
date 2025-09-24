@@ -281,6 +281,7 @@ type UpdateDuckDTO = z.infer<typeof duckUpdateInputSchema>;
 ### Removing controller level validations
 
 - Since we are validating in our middleware, we can safely remove our basic validation checks from each controller, further simplifying our logic
+- Since we can be sure the body only has valid inputs, we can even skip destructuring, and just pass the body directly for `create`
 
 ```ts
 import type { RequestHandler } from 'express';
@@ -298,14 +299,7 @@ const getAllDucks: RequestHandler = async (req, res) => {
 	res.json(ducks);
 };
 const createDuck: RequestHandler<{}, {}, DuckInputDTO> = async (req, res) => {
-	const { name, imgUrl, quote, owner } = req.body;
-
-	const newDuck = await Duck.create<DuckInputDTO>({
-		name,
-		imgUrl,
-		quote,
-		owner
-	});
+	const newDuck = await Duck.create<DuckInputDTO>(req.body);
 
 	res.json(newDuck);
 };

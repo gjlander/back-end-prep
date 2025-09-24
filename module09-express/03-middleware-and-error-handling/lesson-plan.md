@@ -238,12 +238,41 @@ app.listen(port, () => {
 ### Adding a cause to a thrown error
 
 - Now errors thrown during DB operations will be handled by our custom error handler, but we have a bunch of early returns where we are currently handling other potential errors
-- Instead of returning, we can throw an error, and add a `cause` to indicate the appropriate status code.
+- Instead of returning, we can throw an error, and add a `cause` to indicate the appropriate status code. Here the number is given directly, but in all future examples, it comes as an object with a `status` property, so let's already use it in that way for consistency.
+
+### Adding type safety and cause as status
+
 - We should first update our errorHandler to get the status code from the cause
 
 ```ts
-res.status(err.cause || 500).json({ message: err.message });
+res.status(err.cause?.status || 500).json({ message: err.message });
 ```
+
+- TS isn't complaining since the error is of type `any`, but let's do some more robust type checks to ensure our error handler doesn't accidentally crash our application with it's own runtime error
+
+```ts
+import type { ErrorRequestHandler } from 'express';
+
+const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
+	process.env.NODE_ENV !== 'production' &&
+		console.error(`\x1b[31m${err.stack}\x1b[0m`);
+	if (err instanceof Error) {
+		if (err.cause) {
+			const cause = err.cause as { status: number };
+			res.status(cause.status).json({ message: err.message });
+			return;
+		}
+		res.status(500).json({ message: err.message });
+		return;
+	}
+	res.status(500).json({ message: 'Internal server error' });
+	return;
+};
+
+export default errorHandler;
+```
+
+### Update controllers
 
 - Then update our duck controllers
 
