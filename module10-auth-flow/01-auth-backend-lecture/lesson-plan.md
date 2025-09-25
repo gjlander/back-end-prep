@@ -463,218 +463,346 @@ const setAuthCookies = (
 };
 ```
 
-## Doing the same in our `signIn` route
+## Doing the same in our `login` endpoint
 
-- Now we need users with existing accounts to be able to sign in
-  - Let's copy the logic in `signUp` as a starting point
-- We'll still need to destructure `email` and `password` from the `sanitizedBody`
+```ts
+export const login: RequestHandler = async (req, res) => {
+	// get email and password from request body
+	const { email, password } = req.body;
 
-```js
-const {
-	sanitizedBody: { email, password }
-} = req;
-```
+	// query the DB to find user with that email
+	const user = await User.findOne({ email }).select('+password').lean();
 
-- Let's rename `found` to `user`, and make sure we `select` the password
-  - We can also delete the `user` that is returned from `User.create()`
+	// if not user is found, throw a 401 error and indicate invalid credentials
+	if (!user)
+		throw new Error('Incorrect credentials', { cause: { status: 401 } });
 
-```js
-const user = await User.findOne({ email }).select('+password');
-```
+	// compare the password to the hashed password in the DB with bcrypt
+	const match = await bcrypt.compare(password, user.password!);
 
-- Change our validation check to if a user doesn't exist
+	// if match is false, throw a 401 error and indicate invalid credentials
+	if (!match)
+		throw new Error('Incorrect credentials', { cause: { status: 401 } });
 
-```js
-if (!user) throw new Error('User not found', { cause: 404 });
-```
+	// delete all Refresh Tokens in DB where userId is equal to _id of user
+	await RefreshToken.deleteMany({ userId: user._id });
 
-- Instead of hashing the password, we now need to `compare`
+	// create new tokens with util function
+	const [refreshToken, accessToken] = await createTokens(user);
 
-```js
-const passwordMatch = await bcrypt.compare(password, user.password);
-```
+	// set auth cookies with util function
+	setAuthCookies(res, refreshToken, accessToken);
 
-- Throw an error if they don't match
-  - Don't let potentially malicious users know if email or password was wrong
-
-```js
-if (!passwordMatch)
-	throw new Error('Invalid email or password', { cause: 401 });
-```
-
-- From here, signing the JWT and the cookie logic are exactly the same
-  - Since we want are JWT and cookie options to be the same for both, we can extract those pieces
-  - Since they are (currently) only used in this file, we can co-locate. If the app grew we could consider moving these to a config file
-- Keep the payload inside, since we need the local variable
-
-```js
-const secret = process.env.JWT_SECRET;
-const tokenOptions = { expiresIn: '6d' };
-const isProduction = process.env.NODE_ENV === 'production';
-const cookieOptions = {
-	httpOnly: true,
-	sameSite: isProduction ? 'None' : 'Lax',
-	secure: isProduction
+	// send generic success response in body of response
+	res.status(200).json({ message: 'Logged in' });
 };
 ```
 
-- Move the repeated values out of `signUp` too
-- It may feel counterintuitive to make this a `POST` request, but we are making a new resource - the cookie
+## Let's skip ahead to `me`
 
-```js
-res.status(201).json({ message: 'Welcome back' });
-```
+```ts
+export const me: RequestHandler = async (req, res, next) => {
+	// get accessToken from request cookies
+	const { accessToken } = req.cookies;
 
-- Try to sign in with email and password and we'll get a `Zod` error
-- We can create a `signInSchema` by omitting the unneeded fields (similar to the `pondDuck`)
+	// if there is no access token throw a 401 error with an appropriate message
+	if (!accessToken)
+		throw new Error('Access token is required.', { cause: { status: 401 } });
 
-```js
-const signInSchema = userSchema.omit({ firstName: true, lastName: true });
+	try {
+		// verify the access token
+		const decoded = jwt.verify(
+			accessToken,
+			ACCESS_JWT_SECRET
+		) as jwt.JwtPayload;
+		// console.log(decoded)
+		//
+		// if there is now decoded.sub if false, throw a 403 error and indicate Invalid or expired token
+		if (!decoded.sub)
+			throw new Error('Invalid or expired access token.', {
+				cause: { status: 403 }
+			});
 
-export { userSchema, duckSchema, signInSchema };
-```
+		// query the DB to find user by id that matches decoded.sub
+		const user = await User.findById(decoded.sub).lean();
 
-- Import and use on `signin` route
+		// throw a 404 error if no user is found
+		if (!user) throw new Error('User not found', { cause: { status: 404 } });
 
-```js
-import { userSchema, signInSchema } from '../zod/schemas.js';
-
-authRouter.route('/signin').post(validateBody(signInSchema), signIn);
-```
-
-- Now our request works, and we get our cookie
-
-## Token verification
-
-- Now that we have signed a token and are sending it with a cookie to the client, we need a way to verify that token when new requests are made
-- One such request is the `me` endpoint, this is where we will actually get the user profile information
-- make the `verifyToken middleware`
-  - Let's hardcode a `userId` for now, and add it to the `req` object
-
-```js
-const verifyToken = (req, res, next) => {
-	console.log('Passed through token verification');
-	req.userId = '6843f9271ecc0c5e0d0b31b7';
-	next();
+		// send generic success message and user info in response body
+		res.status(200).json({ message: 'Valid token', user });
+	} catch (error) {
+		// if error is an because token was expired, call next with a 401 and `ACCESS_TOKEN_EXPIRED' code
+		if (error instanceof jwt.TokenExpiredError) {
+			next(
+				new Error('Expired access token', {
+					cause: { status: 401, code: 'ACCESS_TOKEN_EXPIRED' }
+				})
+			);
+		} else {
+			// call next with a new 401 Error indicated invalid access token
+			next(new Error('Invalid access token.', { cause: { status: 401 } }));
+		}
+	}
 };
 ```
 
-- Move `getUserById` to `me`
-  - not using dynamic URL anymore, destructure our new `userId` property
-  - don't include the password
+## Let's move over to the Travel Journal API to look at how we can implement the `authenticate` middleware
 
-```js
-const me = async (req, res) => {
-	const { userId } = req;
+- We first need to update our `errorHandler` to also handle expired tokens
 
-	if (!isValidObjectId(userId)) throw new Error('Invalid id', { cause: 400 });
+```ts
+import type { ErrorRequestHandler } from 'express';
 
-	const user = await User.findById(userId).lean();
-
-	if (!user) throw new Error('User not found', { cause: 404 });
-
-	res.json(user);
+type ErrorPayload = {
+	message: string;
+	code?: string;
 };
 
-export { signUp, signIn, me };
+const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+	process.env.NODE_ENV !== 'production' && console.error(err.stack);
+	if (err instanceof Error) {
+		const payload: ErrorPayload = { message: err.message };
+		if (err.cause) {
+			const cause = err.cause as { status: number; code?: string };
+			if (cause.code === 'ACCESS_TOKEN_EXPIRED')
+				res.setHeader(
+					'WWW-Authenticate',
+					'Bearer error="token_expired", error_description="The access token expired"'
+				);
+			res.status(cause.status ?? 500).json(payload);
+			return;
+		}
+		res.status(500).json(payload);
+		return;
+	}
+	res.status(500).json({ message: 'Internal server error' });
+	return;
+};
+
+export default errorHandler;
 ```
 
-- create `me` endpoint
-  - This will be our `GET` request, we are reading the profile info
+### Authenticate middleware
 
-```js
-import verifyToken from '../middleware/verifyToken.js';
-import { signUp, signIn, me } from '../controllers/auth.js';
+- We'll need to install cookie-parser and jsonwebtoken
+  - `npm i cookie-parser jsonwebtoken`
+- And their types packages for dev (we can also delete dotenv)
+  - `npm i -D @types/cookie-parser @types/jsonwebtoken`
+- use `cookie-parser` middleware
 
-authRouter.route('/me').get(verifyToken, me);
+```ts
+import cookieParser from 'cookie-parser';
+app.use(express.json(), cookieParser());
 ```
 
-- Test our endpoint, and we should get our user info
+- import our type and jwt
 
-## Getting `userId` from JWT in cookie
-
-- We obviously don't want the `userId` hardcoded, we want to get it from the cookie
-- This is found on the `req.headers.cookie` property, let's first log it to see what we're working with
-
-```js
-console.log(req.headers.cookie);
-```
-
-- We currently have a string, with a single cookie `token=value`
-- In postman, we can manually add more cookies, and control which cookies are sent in the request
-- Let's add a second random cookie to simulate what potentially dealing with several cookies could look like
-
-### Shaping our cookies
-
-- We get a string, and see the cookies are separated by a `;` and a space
-- First we can make this an array of individual cookies by using the `split` method
-  - since each cookie is separated by a `;` then a space, we can set that as our separator
-
-```js
-const cookies = req.headers.cookie?.split('; ');
-
-console.log(cookies);
-```
-
-- Now we get an array of strings, where each item has the full cookie
-- We can then split these strings based on the '='
-
-```js
-const cookieArrays = cookies.map(cookie => cookie.split('='));
-console.log(cookieArrays);
-```
-
-- And with an array of paired arrays, we can use the `Object.fromEntries` method to turn this array of arrays into an object
-
-```js
-const cookiesObj = Object.fromEntries(cookieArrays);
-
-console.log(cookiesObj);
-```
-
-- Now we can destructure to access the cookie we want, which is our token
-
-```js
-const { token } = cookiesObj;
-
-console.log(token);
-```
-
-- We can save ourselves all of this trouble, by adding a check if cookies exist, calling next with an error if there aren't any
-  - Remember calling next with an argument will land us in our error handler
-  - As of express v5 this is the same behaviour as openly throwing an error
-
-```js
-if (!req.headers.cookie) {
-	next(new Error('Unauthorized, please sign in', { cause: 401 }));
-}
-```
-
-- Similarly, if there is no token, we can call the same
-
-```js
-if (!token) {
-	next(new Error('Unauthorized, please sign in', { cause: 401 }));
-}
-```
-
-- Now if we pass validation, we need to decode the token, so we import `jwt` and use the `verify` method
-
-```js
+```ts
+import type { RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
-// rest of function
-const decoded = jwt.verify(token, process.env.JWT_SECRET);
-console.log(decoded);
 ```
 
-- Our decoded token has the `userId` property, so we can destructure it, and set it instead our hard coded value
+- Since we don't have the config setup here, we import and validate the key. It must match the secret key from the auth server
 
-```js
-const { userId } = jwt.verify(token, process.env.JWT_SECRET);
-//   console.log(userId);
-
-req.userId = userId;
+```
+MONGO_URI=mongodb+srv://dbUser:verysecurepassword@express.93nc620.mongodb.net/
+ACCESS_JWT_SECRET=ce8dbacbb0459ba342690a48332595592e34203c1aa7c676faac43853ccac642
 ```
 
-- Now we get the actually signed in user!
-  - Show signing in another user and getting different profile
+- Validate env secret
+
+```ts
+const secret = process.env.ACCESS_JWT_SECRET;
+if (!secret) {
+	console.log('Missing access token secret');
+	process.exit(1);
+}
+```
+
+- Then we make our classic middleware signature
+  - adding `_` is a convention to indicate that we won't be using this parameter
+
+```ts
+const authenticate: RequestHandler = (req, _res, next) => {};
+
+export default authenticate;
+```
+
+- re-export
+
+- The beginning of this is going to look just like our `me` endpoint
+- We check for the accessToken and throw an error if it's not there
+
+```ts
+const { accessToken } = req.cookies;
+if (!accessToken)
+	throw new Error('Not authenticated', { cause: { status: 401 } });
+```
+
+- in a try/catch block we try to decode the token, and handle errors in the same way
+
+```ts
+try {
+	const decoded = jwt.verify(accessToken, secret) as jwt.JwtPayload;
+	// console.log(decoded)
+	//
+	// if there is now decoded.sub if false, throw a 403 error and indicate Invalid or expired token
+	if (!decoded.sub)
+		throw new Error('Invalid or expired access token.', {
+			cause: { status: 403 }
+		});
+} catch (error) {
+	// if error is an because token was expired, call next with a 401 and `ACCESS_TOKEN_EXPIRED' code
+	if (error instanceof jwt.TokenExpiredError) {
+		next(
+			new Error('Expired access token', {
+				cause: { status: 401, code: 'ACCESS_TOKEN_EXPIRED' }
+			})
+		);
+	} else {
+		// call next with a new 401 Error indicated invalid access token
+		next(new Error('Invalid access token.', { cause: { status: 401 } }));
+	}
+}
+```
+
+- We store the userId and user roles that came from the token, and add them to the request object and call `next()`
+
+```ts
+const user = {
+	id: decoded.sub,
+	roles: decoded.roles
+};
+req.user = user;
+
+next();
+```
+
+- Add the type so TS is happy
+
+```ts
+namespace Express {
+	interface Request {
+		user?: {
+			id: string;
+			roles: string[];
+		};
+	}
+}
+```
+
+- We add it to protected endpoints
+
+```ts
+import { authenticate } from '#middlewares';
+
+const postsRouter = Router();
+
+postsRouter
+	.route('/')
+	.get(getAllPosts)
+	.post(authenticate, validateZod(postSchema), createPost);
+
+postsRouter
+	.route('/:id')
+	.get(getSinglePost)
+	.put(authenticate, validateZod(postSchema), updatePost)
+	.delete(authenticate, deletePost);
+
+export default postsRouter;
+```
+
+- Now when you are signed in you can make a new post. Currently any signed in user can edit or delete anyone's post, but we'll fix that later
+
+## Now for logging out
+
+```ts
+export const logout: RequestHandler = async (req, res) => {
+	// get refreshToken from request cookies
+	const { refreshToken } = req.cookies;
+
+	// if there is a refreshToken cookie, delete corresponding RefreshToken from the DB
+	if (refreshToken) await RefreshToken.deleteOne({ token: refreshToken });
+
+	// clear the refreshToken cookie
+	res.clearCookie('refreshToken');
+
+	// clear the accessToken cookie
+	res.clearCookie('accessToken');
+
+	// send generic success message in response body
+	res.json({ message: 'Successfully logged out' });
+};
+```
+
+## And finally our refresh endpoint
+
+- We'll do some fancy stuff on the frontend so that any time our access token is expired, we'll automatically hit this endpoint to generate new tokens
+
+```ts
+export const refresh: RequestHandler = async (req, res) => {
+	// get refreshToken from request cookies
+	const { refreshToken } = req.cookies;
+
+	// if there is no refresh token throw a 401 error with an appropriate message
+	if (!refreshToken)
+		throw new Error('Refresh token is required.', { cause: { status: 401 } });
+
+	// query the DB for a RefreshToken that has a token property that matches the refreshToken
+	const storedToken = await RefreshToken.findOne({
+		token: refreshToken
+	}).lean();
+
+	// if no storedToken is found, throw a 403 error with an appropriate message
+	if (!storedToken) {
+		throw new Error('Refresh token not found.', { cause: { status: 403 } });
+	}
+
+	// delete the storedToken from the DB
+	await RefreshToken.findByIdAndDelete(storedToken._id);
+
+	// query the DB for the user with _id that matches the userId of the storedToken
+	const user = await User.findById(storedToken.userId).lean();
+
+	// if not user is found, throw a 403 error
+	if (!user) {
+		throw new Error('User not found.', { cause: { status: 403 } });
+	}
+
+	// create new tokens with util function
+	const [newRefreshToken, newAccessToken] = await createTokens(user);
+
+	// set auth cookies with util function
+	setAuthCookies(res, newRefreshToken, newAccessToken);
+
+	// send generic success response in body of response
+	res.json({ message: 'Refreshed' });
+};
+```
+
+- And with that we have the logic for our controllers! As a final polish, we can look at...
+
+### Adding type safety to our controllers
+
+- Import z and schemas to infer types for our DTOs, and add a type for our generic success responses
+
+```ts
+import type { z } from 'zod/v4';
+import type { registerSchema, loginSchema } from '#schemas';
+
+type RegisterDTO = z.infer<typeof registerSchema>;
+type LoginDTO = z.infer<typeof loginSchema>;
+type SuccessResBody = {
+	message: string;
+};
+```
+
+- register
+
+```ts
+export const register: RequestHandler<{}, SuccessResBody, RegisterDTO> = async (
+	req,
+	res
+) => {};
+```
