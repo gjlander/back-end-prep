@@ -547,9 +547,158 @@ export const me: RequestHandler = async (req, res, next) => {
 };
 ```
 
+## Adding validation and Type safety to our current endpoints
+
+- Now that we know out endpoint are working as intended, let's add Zod in for validation, and get some type safety
+
+### Validate with Zod
+
+- Since our schemas are already built, and we have our middleware, now we just need to use them in our `authRouter`
+
+```ts
+authRouter.post('/register', validateBodyZod(registerSchema), register);
+
+authRouter.post('/login', validateBodyZod(loginSchema), login);
+```
+
+### Adding type safety to our controllers
+
+- Import z and schemas to infer types for our DTOs, and add a type for our generic success responses
+
+```ts
+import type { z } from 'zod/v4';
+import type { registerSchema, loginSchema } from '#schemas';
+
+type RegisterDTO = z.infer<typeof registerSchema>;
+type LoginDTO = z.infer<typeof loginSchema>;
+type SuccessResBody = {
+	message: string;
+};
+```
+
+- register
+
+```ts
+export const register: RequestHandler<{}, SuccessResBody, RegisterDTO> = async (
+	req,
+	res
+) => {};
+```
+
+- We can also create a `userSchema` to make `create` generic
+
+```ts
+export const userSchema = registerSchema.omit({ confirmPassword: true });
+```
+
+```ts
+type UserDTO = z.infer<typeof userSchema>;
+// other stuff...
+
+const user = await User.create<UserDTO>({
+	firstName,
+	lastName,
+	email,
+	password: hashedPW
+});
+```
+
+- login
+
+```ts
+export const login: RequestHandler<{}, SuccessResBody, LoginDTO> = async (
+	req,
+	res
+) => {};
+```
+
+- me
+- Make a schema for the user profile
+
+```ts
+export const userProfileSchema = z.object({
+	...userSchema.omit({ password: true }).shape,
+	_id: z.instanceof(Types.ObjectId),
+	roles: z.array(z.string()),
+	createdAt: z.date(),
+	__v: z.int().nonnegative()
+});
+```
+
+- Infer the type and create a type intersection
+
+```ts
+type UserProfile = { user: z.infer<typeof userProfileSchema> };
+type MeResBody = SuccessResBody & UserProfile;
+export const me: RequestHandler<{}, MeResBody> = async (req, res, next) => {};
+```
+
 ## Let's move over to the Travel Journal API to look at how we can implement the `authenticate` middleware
 
-- We first need to update our `errorHandler` to also handle expired tokens
+- Currently anyone can create a post, and anyone can edit any post (demo it)
+
+  - Currently we're copy/pasting the author, but when we connect this to a frontend, that will come from the user profile
+
+- In order for populate to work, we need to make the author a Object Id and we need to make a User model. It's our job to make sure the User model here matches the one in our Auth Server. The only change we'll make is to not select the password
+- Post
+
+```ts
+import { model, Schema } from 'mongoose';
+
+const postSchema = new Schema(
+	{
+		title: { type: String, required: [true, 'Title is required'] },
+		author: {
+			type: Schema.Types.ObjectId,
+			required: [true, 'Author is required'],
+			ref: 'User'
+		},
+		image: { type: String, required: [true, 'Cover image is required'] },
+		content: { type: String, required: [true, 'Body is required'] }
+	},
+	{
+		timestamps: true
+	}
+);
+
+export default model('Post', postSchema);
+```
+
+- User
+
+```ts
+import { Schema, model } from 'mongoose';
+
+const userSchema = new Schema(
+	{
+		firstName: { type: String, required: [true, 'First name is required'] },
+		lastName: { type: String, required: [true, 'Last name is required'] },
+		email: {
+			type: String,
+			required: true,
+			unique: true
+		},
+		password: {
+			type: String,
+			required: true,
+			select: false
+		},
+		roles: {
+			type: [String],
+			default: ['user']
+		}
+	},
+	{
+		timestamps: { createdAt: true, updatedAt: false }
+	}
+);
+
+const User = model('User', userSchema);
+
+export default User;
+```
+
+- We need to update our `errorHandler` to also handle expired tokens
 
 ```ts
 import type { ErrorRequestHandler } from 'express';
@@ -718,7 +867,7 @@ export default postsRouter;
 ## Now for logging out
 
 ```ts
-export const logout: RequestHandler = async (req, res) => {
+export const logout: RequestHandler<{}, SuccessResBody> = async (req, res) => {
 	// get refreshToken from request cookies
 	const { refreshToken } = req.cookies;
 
@@ -741,7 +890,7 @@ export const logout: RequestHandler = async (req, res) => {
 - We'll do some fancy stuff on the frontend so that any time our access token is expired, we'll automatically hit this endpoint to generate new tokens
 
 ```ts
-export const refresh: RequestHandler = async (req, res) => {
+export const refresh: RequestHandler<{}, SuccessResBody> = async (req, res) => {
 	// get refreshToken from request cookies
 	const { refreshToken } = req.cookies;
 
@@ -781,28 +930,290 @@ export const refresh: RequestHandler = async (req, res) => {
 };
 ```
 
-- And with that we have the logic for our controllers! As a final polish, we can look at...
+# Authorization
 
-### Adding type safety to our controllers
+- We've done most of the heavy lifting already. Now that we have authentication in place, we can authorize with an if statement (and maybe get fancy with a middleware)
+- We've protected our POST, PUT, and DELETE endpoints for posts, but currently if a user is logged in, they have edit access to any post, whether or not they are the author (demo)
+- In ou `authenticate` middleware, we are adding a `user` property to the Request object that includes the user's id and roles. We can use that to authorize a user
 
-- Import z and schemas to infer types for our DTOs, and add a type for our generic success responses
+## ABAC
+
+- We'll start with allowing only the author of a post to edit it
+- First we need to destructure the `user` property
 
 ```ts
-import type { z } from 'zod/v4';
-import type { registerSchema, loginSchema } from '#schemas';
+const {
+	params: { id },
+	user
+} = req;
+```
 
-type RegisterDTO = z.infer<typeof registerSchema>;
-type LoginDTO = z.infer<typeof loginSchema>;
-type SuccessResBody = {
-	message: string;
+- We then need to check if the `user.id` is equal to the `author` property (as a string). So we'll break up our update into 2 steps:
+  - Find post
+  - Update and save if authorized
+- Query the DB for the post
+
+```ts
+const post = await Post.findById(id);
+
+if (!post)
+	throw new Error(`Post with id of ${id} doesn't exist`, {
+		cause: { status: 404 }
+	});
+```
+
+- Throw an error if id's don't match
+
+```ts
+if (user?.id !== post.author.toString()) {
+	throw new Error('Not authorized', { cause: { status: 403 } });
+}
+```
+
+- Save and populate
+
+```ts
+const {
+	params: { id },
+	body: { title, content, image },
+	user
+} = req;
+
+post.title = title;
+post.content = content;
+post.image = image;
+
+await post.save();
+
+await post.populate('author');
+
+res.json(post);
+```
+
+## RBAC
+
+- We can also easily implement RBAC by checking if the user's roles include 'admin'
+
+```ts
+if (user?.id !== post.author.toString() && !user?.roles.includes('admin')) {
+	throw new Error('Not authorized', { cause: { status: 403 } });
+}
+```
+
+### delete
+
+- We can then do the same to protect the delete endpoint
+
+```ts
+export const deletePost: RequestHandler = async (req, res) => {
+	const {
+		params: { id },
+		user
+	} = req;
+	if (!isValidObjectId(id))
+		throw new Error('Invalid id', { cause: { status: 400 } });
+
+	const post = await Post.findById(id);
+
+	if (!post)
+		throw new Error(`Post with id of ${id} doesn't exist`, {
+			cause: { status: 404 }
+		});
+
+	if (user?.id !== post.author.toString() && !user?.roles.includes('admin')) {
+		throw new Error('Not authorized', { cause: { status: 403 } });
+	}
+	await Post.findByIdAndDelete(id);
+
+	res.json({ success: `Post with id of ${id} was deleted` });
 };
 ```
 
-- register
+## Implementing a middleware
+
+- This solution works, but it's not very scalable. If we were to introduce more roles (such as staff, partner, etc) and more resources, we'd have to copy/paste this kind of logic into all of them. Which makes this a great use case for implementing a middleware
+
+### hasRole
+
+- Similar to our body validation, we'll create a middleware factory so we can pass arguments, saying which roles are allowed to do this operation
 
 ```ts
-export const register: RequestHandler<{}, SuccessResBody, RegisterDTO> = async (
-	req,
-	res
-) => {};
+import type { RequestHandler } from 'express';
+
+const hasRole = (): RequestHandler => {
+	return (req, _res, next) => {
+		next();
+	};
+};
+
+export default hasRole;
+```
+
+- We want `hasRole` to take one or more arguments, to define which roles are allowed to do this operations, for example
+  - We'll use the `self` role to indicate an author should be able to edit
+
+```ts
+hasRole('user', 'staff', 'self');
+```
+
+- To give us flexibility in the number of parameters we use, we can use (rest parameters)[https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/rest_parameters]. These will get passed as an array of strings
+
+```ts
+const hasRole = (...roles: string[]): RequestHandler => {
+	return (req, _res, next) => {
+		next();
+	};
+};
+```
+
+- We should only use `hasRole` if the request has been through the `authenticate` middleware and has added the `user` property, so simply call next with an error right away, and do an early return if it's not there
+
+```ts
+if (!req.user)
+	return next(new Error('Unauthorized', { cause: { status: 401 } }));
+```
+
+- We'll need the `id` from params, and to access the roles and id from the `req.user`
+  - Since those names are taken, we can give aliases when destructuring
+
+```ts
+const { id } = req.params;
+const { roles: userRoles, id: userId } = req.user;
+```
+
+- If the user is an admin, we can call next right away, since they are authorized to do everything
+
+```ts
+if (userRoles.includes('admin')) {
+	return next();
+}
+```
+
+- We can import the middleware and use it now on edit and delete (we could include `admin` for clarity's sake, but it's not necessary since admin automatically passes)
+
+```ts
+postsRouter
+	.route('/:id')
+	.get(getSinglePost)
+	.put(authenticate, hasRole('self'), validateZod(postSchema), updatePost)
+	.delete(authenticate, hasRole('self'), deletePost);
+```
+
+- We can also specify that only `users` can post
+
+```ts
+postsRouter
+	.route('/')
+	.get(getAllPosts)
+	.post(authenticate, hasRole('user'), validateZod(postSchema), createPost);
+```
+
+- If we test our endpoint as an admin, we see that it works!
+
+- We are using the `self` role to allow authors to edit/delete their own posts, which means we'll have to query for the post to check for the author (so we'll also have to make the function async)
+  - test as `self`
+
+```ts
+import { Post } from '#models';
+// other stuff...
+if (roles.includes('self')) {
+	const post = await Post.findById(id);
+
+	if (!post)
+		return next(new Error('Post not found', { cause: { status: 404 } }));
+
+	if (post.author.toString() !== userId) {
+		return next(new Error('Forbidden', { cause: { status: 403 } }));
+	}
+
+	return next();
+}
+```
+
+#### Removing redundant DB query
+
+- But now we're querying the DB for the post twice. Probably not a huge deal, if we can avoid this redundant call, we should
+- Instead of only querying when role includes self, we can always do it, and add the post to the request body
+
+```ts
+const { id } = req.params;
+const { roles: userRoles, id: userId } = req.user;
+
+const post = await Post.findById(id);
+
+if (!post) return next(new Error('Post not found', { cause: { status: 404 } }));
+req.post = post;
+```
+
+- We add it to our `index.d.ts` file. We can use a TS Utility helper called `InstanceType` to derive the type we get from our Post
+  - We can't use Zod our a DTO type here, since we need to include all of the methods
+
+```ts
+import type { Post } from '#models';
+namespace Express {
+	interface Request {
+		user?: {
+			id: string;
+			roles: string[];
+		};
+		post?: InstanceType<typeof Post>;
+	}
+}
+```
+
+- Back in our controllers, we can destructure this new property instead of querying again.
+  - We'll still throw an error if no post property is there
+  - We can remove our check here if the id's match
+
+```ts
+export const updatePost: RequestHandler = async (req, res) => {
+	const {
+		params: { id },
+		body: { title, content, image },
+		post
+	} = req;
+
+	if (!post)
+		throw new Error(`Post with id of ${id} doesn't exist`, {
+			cause: { status: 404 }
+		});
+
+	post.title = title;
+	post.content = content;
+	post.image = image;
+
+	await post.save();
+
+	await post.populate('author');
+
+	res.json(post);
+};
+```
+
+- And the same for delete
+
+```ts
+export const deletePost: RequestHandler = async (req, res) => {
+	const {
+		params: { id },
+		post
+	} = req;
+
+	if (!post)
+		throw new Error(`Post with id of ${id} doesn't exist`, {
+			cause: { status: 404 }
+		});
+
+	await Post.findByIdAndDelete(id);
+
+	res.json({ success: `Post with id of ${id} was deleted` });
+};
+```
+
+- Our final step is to check for any other potential roles
+
+```ts
+if (!roles.some((role) => userRoles.includes(role))) {
+	return next(new Error('Forbidden', { cause: { status: 403 } }));
+}
 ```

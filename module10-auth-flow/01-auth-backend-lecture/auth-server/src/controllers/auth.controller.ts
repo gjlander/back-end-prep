@@ -5,13 +5,16 @@ import { SALT_ROUNDS, ACCESS_JWT_SECRET } from '#config';
 import { User, RefreshToken } from '#models';
 import { createTokens, setAuthCookies } from '#utils';
 import type { z } from 'zod/v4';
-import { registerSchema, loginSchema } from '#schemas';
+import type { registerSchema, loginSchema, userSchema, userProfileSchema } from '#schemas';
 
 type RegisterDTO = z.infer<typeof registerSchema>;
 type LoginDTO = z.infer<typeof loginSchema>;
+type UserDTO = z.infer<typeof userSchema>;
 type SuccessResBody = {
   message: string;
 };
+type UserProfile = { user: z.infer<typeof userProfileSchema> };
+type MeResBody = SuccessResBody & UserProfile;
 
 export const register: RequestHandler<{}, SuccessResBody, RegisterDTO> = async (req, res) => {
   // we need access the user info from the request body
@@ -26,7 +29,7 @@ export const register: RequestHandler<{}, SuccessResBody, RegisterDTO> = async (
   const hashedPW = await bcrypt.hash(password, salt);
 
   // create user in DB with create method
-  const user = await User.create({ firstName, lastName, email, password: hashedPW });
+  const user = await User.create<UserDTO>({ firstName, lastName, email, password: hashedPW });
 
   const [refreshToken, accessToken] = await createTokens(user);
 
@@ -36,7 +39,7 @@ export const register: RequestHandler<{}, SuccessResBody, RegisterDTO> = async (
   res.status(201).json({ message: 'Registered' });
 };
 
-export const login: RequestHandler = async (req, res) => {
+export const login: RequestHandler<{}, SuccessResBody, LoginDTO> = async (req, res) => {
   // get email and password from request body
   const { email, password } = req.body;
 
@@ -65,7 +68,7 @@ export const login: RequestHandler = async (req, res) => {
   res.status(200).json({ message: 'Logged in' });
 };
 
-export const refresh: RequestHandler = async (req, res) => {
+export const refresh: RequestHandler<{}, SuccessResBody> = async (req, res) => {
   // get refreshToken from request cookies
   const { refreshToken } = req.cookies;
 
@@ -101,7 +104,7 @@ export const refresh: RequestHandler = async (req, res) => {
   res.json({ message: 'Refreshed' });
 };
 
-export const logout: RequestHandler = async (req, res) => {
+export const logout: RequestHandler<{}, SuccessResBody> = async (req, res) => {
   // get refreshToken from request cookies
   const { refreshToken } = req.cookies;
 
@@ -118,7 +121,7 @@ export const logout: RequestHandler = async (req, res) => {
   res.json({ message: 'Successfully logged out' });
 };
 
-export const me: RequestHandler = async (req, res, next) => {
+export const me: RequestHandler<{}, MeResBody> = async (req, res, next) => {
   // get accessToken from request cookies
   const { accessToken } = req.cookies;
 
@@ -141,7 +144,7 @@ export const me: RequestHandler = async (req, res, next) => {
     if (!user) throw new Error('User not found', { cause: { status: 404 } });
 
     // send generic success message and user info in response body
-    res.status(200).json({ message: 'Valid token', user });
+    res.json({ message: 'Valid token', user });
   } catch (error) {
     // if error is an because token was expired, call next with a 401 and `ACCESS_TOKEN_EXPIRED' code
     if (error instanceof jwt.TokenExpiredError) {

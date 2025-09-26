@@ -1,15 +1,29 @@
-import { model, Schema } from 'mongoose';
+import { Schema, model } from 'mongoose';
 
 const userSchema = new Schema(
   {
-    firstName: { type: String, required: [true, 'Firstname is required'] },
-    lastName: { type: String, required: [true, 'Lastname is required'] },
-    email: { type: String, required: [true, 'Email is required'], unique: true },
-    password: { type: String, required: [true, 'Password is required'], select: false }
+    firstName: { type: String, required: [true, 'First name is required'] },
+    lastName: { type: String, required: [true, 'Last name is required'] },
+    email: {
+      type: String,
+      required: true,
+      unique: true
+    },
+    password: {
+      type: String,
+      required: true,
+      select: false
+    },
+    roles: {
+      type: [String],
+      default: ['user']
+    }
   },
   {
-    timestamps: true
+    timestamps: { createdAt: true, updatedAt: false }
   }
 );
 
-export default model('User', userSchema);
+const User = model('User', userSchema);
+
+export default User;

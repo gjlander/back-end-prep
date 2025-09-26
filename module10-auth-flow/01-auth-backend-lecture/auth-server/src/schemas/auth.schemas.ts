@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { z } from 'zod/v4';
 
 const emailError = 'Please provide a valid email address.';
@@ -33,4 +34,14 @@ export const registerSchema = z
 export const loginSchema = z.object({
   email: emailSchema,
   password: basePasswordSchema
+});
+
+export const userSchema = registerSchema.omit({ confirmPassword: true });
+
+export const userProfileSchema = z.object({
+  ...userSchema.omit({ password: true }).shape,
+  _id: z.instanceof(Types.ObjectId),
+  roles: z.array(z.string()),
+  createdAt: z.date(),
+  __v: z.int().nonnegative()
 });
