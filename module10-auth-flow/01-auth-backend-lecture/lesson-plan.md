@@ -1217,3 +1217,5 @@ if (!roles.some((role) => userRoles.includes(role))) {
 	return next(new Error('Forbidden', { cause: { status: 403 } }));
 }
 ```
+
+- If you manage to finish the authorization features, go back and add type safety to each of the controllers
